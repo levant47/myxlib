@@ -193,6 +193,7 @@ struct X11PutImageRequestHeader
 
 enum X11EventType : u8
 {
+    X11EventTypeButtonPress = 4,
     X11EventTypeExpose = 12,
 };
 

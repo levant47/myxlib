@@ -11,8 +11,8 @@ CStringView XAUTHORITY_PATH = "/run/user/1000/gdm/Xauthority"; // TODO: make thi
 const s16 TARGET_X11_MAJOR_VERSION = 11;
 const s16 TARGET_X11_MINOR_VERSION = 0;
 const u16 DEPTH = 24;
-const u32 WINDOW_WIDTH = 1920;
-const u32 WINDOW_HEIGHT = 1080;
+const u32 WINDOW_WIDTH = 512;
+const u32 WINDOW_HEIGHT = 512;
 const u64 X11_MAX_REQUEST_SIZE = 512 * 100 * 4; // in bytes
 
 void put_image_in_chunks(
@@ -119,7 +119,7 @@ extern "C" void _start()
     {
         0x00FFFF00, // background
         0x00FF0000, // border
-        X11EventMarkExposure, // events
+        X11EventMarkExposure | X11EventMarkButtonPress, // events
     };
     X11CreateWindowRequestHeader create_window_request_header;
     create_window_request_header.type = X11RequestTypeCreateWindow;
@@ -167,6 +167,8 @@ extern "C" void _start()
     assert(expose_event.type == X11EventTypeExpose, "Expected expose event");
 
     // put image
+    Pixel color_wheel[3] = { 0x00FF0000, 0x0000FF00, 0x000000FF };
+    u64 current_color_index = 0;
     auto image_width = WINDOW_WIDTH;
     auto image_height = WINDOW_HEIGHT;
     auto image_size = image_width * image_height * sizeof(Pixel);
@@ -174,16 +176,48 @@ extern "C" void _start()
     u32 counter = 0;
     while (true)
     {
-        auto image_bytes = (byte*)image;
+        PollParameter poll_parameter;
+        poll_parameter.descriptor = x11_socket;
+        poll_parameter.requested_events = PollEventDataAvailable;
+        auto poll_result = poll(&poll_parameter, 1, 0);
+        assert(poll_result >= 0, "Failed to poll X11 socket for events");
+        if (poll_result != 0)
+        { // there are events available
+            if (poll_parameter.returned_events & PollEventHangUp)
+            { // prevent a crash due to a pipe fail (status code 141)
+                break;
+            }
+
+
+            if (poll_parameter.returned_events & PollEventDataAvailable)
+            {
+                for (u64 i = 0; i < (u64)poll_result; i++)
+                {
+                    byte event_buffer[32];
+                    auto read_event_result = read(x11_socket, event_buffer, sizeof(event_buffer));
+                    assert(read_event_result == sizeof(event_buffer), "Failed to read event");
+
+                    if (event_buffer[0] == X11EventTypeButtonPress)
+                    {
+                        current_color_index = (current_color_index + 1) % ARRAY_SIZE(color_wheel);
+                    }
+
+                    // print(i, ": ");
+                    // for (u64 k = 0; k < sizeof(event_buffer); k++)
+                    // {
+                    //     print((u64)event_buffer[k], " ");
+                    // }
+                    // print("\n");
+                }
+            }
+        }
+
         for (u64 y = 0; y < image_height; y++)
         {
             for (u64 x = 0; x < image_width; x++)
             {
-                auto byte_index = (y * image_width + x) * sizeof(Pixel);
-                image_bytes[byte_index] = 0; // B
-                image_bytes[byte_index+1] = 0; // G
-                image_bytes[byte_index+2] = counter; // R
-                image_bytes[byte_index+3] = 0; // A
+                auto pixel_index = y * image_width + x;
+                image[pixel_index] = color_wheel[current_color_index];
             }
         }
 
@@ -200,6 +234,8 @@ extern "C" void _start()
     default_deallocate(image);
 
     close(x11_socket);
+
+    print("Done\n");
 
     exit(0);
 }
