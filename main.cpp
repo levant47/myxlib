@@ -3,15 +3,15 @@
 #pragma pack(push, 1)
 
 #include "x11.cpp"
-
-typedef u32 Pixel;
+#include "renderer.cpp"
+#include "text_renderer.cpp"
 
 const char X11_SOCKET_PATH[] = "/tmp/.X11-unix/X0";
 CStringView XAUTHORITY_PATH = "/run/user/1000/gdm/Xauthority"; // TODO: make this user-independent
 const s16 TARGET_X11_MAJOR_VERSION = 11;
 const s16 TARGET_X11_MINOR_VERSION = 0;
 const u16 DEPTH = 24;
-const u32 WINDOW_WIDTH = 512;
+const u32 WINDOW_WIDTH = 512 * 2;
 const u32 WINDOW_HEIGHT = 512;
 const u64 X11_MAX_REQUEST_SIZE = 512 * 100 * 4; // in bytes
 
@@ -166,14 +166,14 @@ extern "C" void _start()
     assert(read_expose_event_result == sizeof(expose_event), "Failed to read expose event");
     assert(expose_event.type == X11EventTypeExpose, "Expected expose event");
 
+    initialize_fonts();
+
     // put image
     Pixel color_wheel[3] = { 0x00FF0000, 0x0000FF00, 0x000000FF };
+    Pixel font_color = BLACK;
     u64 current_color_index = 0;
-    auto image_width = WINDOW_WIDTH;
-    auto image_height = WINDOW_HEIGHT;
-    auto image_size = image_width * image_height * sizeof(Pixel);
-    auto image = (Pixel*)default_allocate(image_size);
     u32 counter = 0;
+    auto image = Image::allocate(WINDOW_WIDTH, WINDOW_HEIGHT);;
     while (true)
     {
         PollParameter poll_parameter;
@@ -199,7 +199,8 @@ extern "C" void _start()
 
                     if (event_buffer[0] == X11EventTypeButtonPress)
                     {
-                        current_color_index = (current_color_index + 1) % ARRAY_SIZE(color_wheel);
+                        current_color_index = (current_color_index + 1) % 6;
+                        font_color = current_color_index % 2 == 0 ? BLACK : WHITE;
                     }
 
                     // print(i, ": ");
@@ -212,16 +213,19 @@ extern "C" void _start()
             }
         }
 
-        for (u64 y = 0; y < image_height; y++)
+        for (u64 y = 0; y < image.height; y++)
         {
-            for (u64 x = 0; x < image_width; x++)
+            for (u64 x = 0; x < image.width; x++)
             {
-                auto pixel_index = y * image_width + x;
-                image[pixel_index] = color_wheel[current_color_index];
+                auto pixel_index = y * image.width + x;
+                image.data[pixel_index] = color_wheel[current_color_index % 3];
             }
         }
 
-        put_image_in_chunks(x11_socket, window_id, graphics_context_id, image, image_width, image_height);
+        // render_text("Hello world!", BLACK, image, Vector2<u64>::construct(100, 100), 16 * 8);
+        render_text(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", font_color, image, Vector2<u64>::construct(50, 50), 16 * 4);
+
+        put_image_in_chunks(x11_socket, window_id, graphics_context_id, image.data, image.width, image.height);
 
         SleepTime sleep_time;
         sleep_time.seconds = 0;
@@ -231,7 +235,7 @@ extern "C" void _start()
         counter++;
     }
 
-    default_deallocate(image);
+    image.deallocate();
 
     close(x11_socket);
 
