@@ -22,4 +22,15 @@ struct Image
     {
         default_deallocate(data);
     }
+
+    void clear(Pixel color)
+    {
+        for (u64 y = 0; y < height; y++)
+        {
+            for (u64 x = 0; x < width; x++)
+            {
+                data[y * width + x] = color;
+            }
+        }
+    }
 };

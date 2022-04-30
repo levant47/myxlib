@@ -1487,7 +1487,7 @@ void initialize_fonts()
 }
 
 void render_text(
-    CStringView text,
+    String text,
     Pixel text_color,
     Image image,
     Vector2<u64> position,
@@ -1499,10 +1499,18 @@ void render_text(
     u64 y = position.y;
     u64 x_scale = size / GLYPH_WIDTH / 2;
     u64 y_scale = size / GLYPH_HEIGHT;
-    while (text[text_i] != '\0' && x < image.width)
+    while (text_i < text.size && x < image.width)
     {
-        auto glyph = font_map[text[text_i]];
-        assert(glyph != nullptr, "render_text: unmapped character: ", text[text_i]);
+        if (text.data[text_i] == '\n')
+        {
+            x = position.x;
+            y += GLYPH_HEIGHT * y_scale;
+            text_i++;
+            continue;
+        }
+
+        auto glyph = font_map[text.data[text_i]];
+        assert(glyph != nullptr, "render_text: unmapped character: ", text.data[text_i]);
         for (u64 glyph_y = 0; glyph_y < GLYPH_HEIGHT; glyph_y++)
         {
             for (u64 glyph_x = 0; glyph_x < GLYPH_WIDTH; glyph_x++)

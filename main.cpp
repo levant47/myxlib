@@ -5,6 +5,7 @@
 #include "x11.cpp"
 #include "renderer.cpp"
 #include "text_renderer.cpp"
+#include "input_renderer.cpp"
 
 const char X11_SOCKET_PATH[] = "/tmp/.X11-unix/X0";
 CStringView XAUTHORITY_PATH = "/run/user/1000/gdm/Xauthority"; // TODO: make this user-independent
@@ -14,6 +15,7 @@ const u16 DEPTH = 24;
 const u32 WINDOW_WIDTH = 512 * 2;
 const u32 WINDOW_HEIGHT = 512;
 const u64 X11_MAX_REQUEST_SIZE = 512 * 100 * 4; // in bytes
+const Pixel BACKGROUND_COLOR = WHITE;
 
 void put_image_in_chunks(
     Descriptor x11_socket,
@@ -119,7 +121,7 @@ extern "C" void _start()
     {
         0x00FFFF00, // background
         0x00FF0000, // border
-        X11EventMarkExposure | X11EventMarkButtonPress, // events
+        X11EventMarkExposure | X11EventMarkButtonPress | X11EventMarkKeyPress, // events
     };
     X11CreateWindowRequestHeader create_window_request_header;
     create_window_request_header.type = X11RequestTypeCreateWindow;
@@ -169,11 +171,10 @@ extern "C" void _start()
     initialize_fonts();
 
     // put image
-    Pixel color_wheel[3] = { 0x00FF0000, 0x0000FF00, 0x000000FF };
     Pixel font_color = BLACK;
-    u64 current_color_index = 0;
-    u32 counter = 0;
     auto image = Image::allocate(WINDOW_WIDTH, WINDOW_HEIGHT);;
+    auto input_state = InputState::construct(Vector2<u64>::construct(100, 100), Vector2<u64>::construct(200, 40), 32);
+    auto events = List<X11Event>::allocate();
     while (true)
     {
         PollParameter poll_parameter;
@@ -193,37 +194,25 @@ extern "C" void _start()
             {
                 for (u64 i = 0; i < (u64)poll_result; i++)
                 {
-                    byte event_buffer[32];
-                    auto read_event_result = read(x11_socket, event_buffer, sizeof(event_buffer));
+                    X11Event event_buffer;
+                    auto read_event_result = read(x11_socket, &event_buffer, sizeof(event_buffer));
                     assert(read_event_result == sizeof(event_buffer), "Failed to read event");
 
-                    if (event_buffer[0] == X11EventTypeButtonPress)
-                    {
-                        current_color_index = (current_color_index + 1) % 6;
-                        font_color = current_color_index % 2 == 0 ? BLACK : WHITE;
-                    }
+                    events.push(event_buffer);
 
                     // print(i, ": ");
                     // for (u64 k = 0; k < sizeof(event_buffer); k++)
                     // {
-                    //     print((u64)event_buffer[k], " ");
+                    //     print((u64)((byte*)&event_buffer)[k], " ");
                     // }
                     // print("\n");
                 }
             }
         }
 
-        for (u64 y = 0; y < image.height; y++)
-        {
-            for (u64 x = 0; x < image.width; x++)
-            {
-                auto pixel_index = y * image.width + x;
-                image.data[pixel_index] = color_wheel[current_color_index % 3];
-            }
-        }
+        image.clear(BACKGROUND_COLOR);
 
-        // render_text("Hello world!", BLACK, image, Vector2<u64>::construct(100, 100), 16 * 8);
-        render_text(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", font_color, image, Vector2<u64>::construct(50, 50), 16 * 4);
+        render_input(&input_state, events, image);
 
         put_image_in_chunks(x11_socket, window_id, graphics_context_id, image.data, image.width, image.height);
 
@@ -232,7 +221,7 @@ extern "C" void _start()
         sleep_time.nanoseconds = 16 * 1000 * 1000; // ~60 FPS
         nanosleep(&sleep_time);
 
-        counter++;
+        events.clear();
     }
 
     image.deallocate();
