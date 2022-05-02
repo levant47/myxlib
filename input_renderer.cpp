@@ -97,7 +97,8 @@ void render_input_cursor(InputState state, Image image)
     if (state.is_in_focus && state.timer % 60 < 30)
     {
         auto text_width = state.text.size * GLYPH_WIDTH * state.font_size / GLYPH_WIDTH / 2;
-        auto cursor_position_x = state.position.x + InputState::padding + min(text_width, state.dimensions.x - InputState::padding * 2 - InputState::cursor_width);
+        auto cursor_position_x = state.position.x + InputState::padding
+            + min(text_width, state.dimensions.x - InputState::padding * 2 - InputState::cursor_width);
         for (u64 y = state.position.y + InputState::padding; y < state.position.y + InputState::padding + state.font_size; y++)
         {
             for (u64 x = cursor_position_x; x < cursor_position_x + InputState::cursor_width; x++)
@@ -138,7 +139,6 @@ void render_input(InputState* state, List<X11Event> events, Image image)
     Vector2<u64> text_position;
     text_position.y = state->position.y + (state->dimensions.y - state->font_size) / 2;
     text_position.x = state->position.y + InputState::padding;
-    // render_text(state->text, state->text_color, image, text_position, state->font_size);
     render_input_text(*state, image);
     render_input_cursor(*state, image);
 

@@ -202,6 +202,15 @@ struct X11Event
 {
     X11EventType type;
     byte data[31];
+
+    void print_debug()
+    {
+        for (u64 k = 0; k < sizeof(*this); k++)
+        {
+            print((u64)((byte*)this)[k], " ");
+        }
+        print("\n");
+    }
 };
 
 // https://gist.github.com/rickyzhang82/8581a762c9f9fc6ddb8390872552c250
